@@ -1,0 +1,13 @@
+{
+  "settings": {
+    "storeName": "PARVATI BHANDI STORES",
+    "tagline": "Quality Kitchenware, Steel, Brass & Home Appliances",
+    "address": "Main Market, Station Road, Opp. SBI",
+    "phone": "9876543210",
+    "gstin": "27AAAAA0000A1Z5",
+    "adminUser": "Admin",
+    "adminPass": "admin123"
+  },
+  "products": [],
+  "bills": []
+}
