@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   X, Image as ImageIcon, MessageCircle, 
-  CheckCircle2, Sparkles, Palette
+  CheckCircle2, Sparkles, Palette, Share2, ClipboardCheck
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 
@@ -13,6 +13,8 @@ export default function BillReceiptModal({ bill, onClose }) {
 
   const [downloadingPhoto, setDownloadingPhoto] = useState(false);
   const [photoSavedToast, setPhotoSavedToast] = useState(false);
+  const [sendingWhatsAppPhoto, setSendingWhatsAppPhoto] = useState(false);
+  const [clipboardNotice, setClipboardNotice] = useState(false);
   const [phoneNumberInput, setPhoneNumberInput] = useState(bill?.customerPhone || '');
   const [showPhonePrompt, setShowPhonePrompt] = useState(false);
 
@@ -79,8 +81,10 @@ export default function BillReceiptModal({ bill, onClose }) {
     }
   };
 
-  // 2. SEND ON WHATSAPP & OPEN WHATSAPP
-  const handleSendOnWhatsApp = () => {
+  // 2. SEND PHOTO DIRECTLY ON WHATSAPP (NO TEXT - PHOTO ONLY)
+  const handleSendPhotoOnWhatsApp = async () => {
+    if (!receiptRef.current) return;
+
     let rawPhone = phoneNumberInput.trim() || bill.customerPhone?.trim() || '';
     let cleanPhone = rawPhone.replace(/\D/g, '');
 
@@ -93,37 +97,80 @@ export default function BillReceiptModal({ bill, onClose }) {
       cleanPhone = `91${cleanPhone}`;
     }
 
-    const itemsListText = (bill.items || [])
-      .map((item, idx) => `${idx + 1}. *${item.name}* (नग: ${item.qty}) x रु.${item.billedPrice || item.price} = रु.${item.total}`)
-      .join('\n');
+    setSendingWhatsAppPhoto(true);
 
-    const whatsappMessage = 
-`*थोरलीवाडीकर यांचे*
-🚩 *पार्वती भांडी स्टोअर्स*
-मेन रोड, अहमदपूर
-मोबाईल: 7875739052, 8208945810
-=============================
-_आमच्याकडे संसार उपयोगी भांडे व नामांकित कंपनीचे कुकर व मिक्सर योग्य दरात मिळतील._
-=============================
-*बिल प्रत (BILL INVOICE)*
-*बिल क्र.:* ${bill.billNumber}
-*दिनांक:* ${formatDisplayDate(bill.date)} (${bill.time || ''})
-*श्री.:* ${bill.customerName || 'सन्माननीय ग्राहक'}
-${bill.customerPhone ? `*मोबाईल:* ${bill.customerPhone}\n` : ''}=============================
-*खरेदी तपशील:*
-${itemsListText}
-=============================
-*एकूण रक्कम:* रु. ${(bill.subtotal || 0).toFixed(2)}
-${bill.discount > 0 ? `*सूट / डिस्काउंट:* -रु. ${(bill.discount || 0).toFixed(2)}\n` : ''}*एकूण देय रक्कम:* *रु. ${(bill.total || 0).toFixed(2)}*
-*पेमेंट पद्धत:* ${bill.paymentMode || 'Cash'}
-=============================
-*नोट : एकदा विकलेला माल परत घेतला जाणार नाही.*
-धन्यवाद! पुन्हा भेट द्या!`;
+    try {
+      // Render bill DOM to Canvas at 3x resolution
+      const canvas = await html2canvas(receiptRef.current, {
+        scale: 3,
+        useCORS: true,
+        backgroundColor: selectedTheme === 'modern' ? '#ffffff' : (selectedTheme === 'royal' ? '#fffdf5' : '#fffdf0'),
+        logging: false,
+        windowWidth: 800,
+      });
 
-    const encodedText = encodeURIComponent(whatsappMessage);
-    const whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodedText}`;
+      const cleanBillNo = (bill.billNumber || 'Bill').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `Parvati_Bhandi_Stores_Bill_${cleanBillNo}.png`;
 
-    window.open(whatsappUrl, '_blank');
+      // Convert Canvas to Blob
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.98));
+      if (!blob) throw new Error('Could not create bill image blob');
+
+      const imageFile = new File([blob], fileName, { type: 'image/png' });
+
+      // METHOD 1: Mobile & Supported Browser Native Share
+      // This directly opens WhatsApp with the ACTUAL BILL PHOTO attached!
+      if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {
+        try {
+          await navigator.share({
+            files: [imageFile],
+            title: `पार्वती भांडी स्टोअर्स बिल ${bill.billNumber}`,
+          });
+          setSendingWhatsAppPhoto(false);
+          return;
+        } catch (shareErr) {
+          if (shareErr.name === 'AbortError') {
+            setSendingWhatsAppPhoto(false);
+            return;
+          }
+          console.warn('Native file share cancelled or failed, falling back to clipboard/download:', shareErr);
+        }
+      }
+
+      // METHOD 2: Desktop / Web WhatsApp Mode
+      // 1. Copy image to clipboard so the user can simply press Ctrl+V / Cmd+V in WhatsApp Web
+      let copiedToClipboard = false;
+      try {
+        if (navigator.clipboard && window.ClipboardItem) {
+          await navigator.clipboard.write([
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          copiedToClipboard = true;
+          setClipboardNotice(true);
+          setTimeout(() => setClipboardNotice(false), 7000);
+        }
+      } catch (clipErr) {
+        console.warn('Clipboard write not allowed:', clipErr);
+      }
+
+      // 2. Also download the photo so it is saved in downloads/gallery
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // 3. Open WhatsApp Web to the customer's chat
+      const whatsappUrl = `https://wa.me/${cleanPhone}`;
+      window.open(whatsappUrl, '_blank');
+
+    } catch (err) {
+      console.error('Error generating photo for WhatsApp:', err);
+      alert('बिलाचा फोटो तयार करताना अडचण आली. कृपया "Download Photo" बटण वापरून फोटो डाऊनलोड करा.');
+    } finally {
+      setSendingWhatsAppPhoto(false);
+    }
   };
 
   return (
@@ -193,13 +240,13 @@ ${bill.discount > 0 ? `*सूट / डिस्काउंट:* -रु. ${(bi
           </div>
         </div>
 
-        {/* Primary Action Buttons: DOWNLOAD PHOTO & SEND ON WHATSAPP */}
+        {/* Primary Action Buttons: DOWNLOAD PHOTO & SEND PHOTO ON WHATSAPP */}
         <div className="p-4 bg-amber-50/80 border-b border-amber-200/80 flex flex-col sm:flex-row items-center gap-3">
           
-          {/* OPTION 1: DOWNLOAD PHOTO (INSTEAD OF PDF) */}
+          {/* OPTION 1: DOWNLOAD PHOTO */}
           <button
             onClick={handleDownloadPhoto}
-            disabled={downloadingPhoto}
+            disabled={downloadingPhoto || sendingWhatsAppPhoto}
             className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 active:scale-95 text-white font-extrabold rounded-2xl shadow-md shadow-red-600/25 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all disabled:opacity-50"
           >
             {downloadingPhoto ? (
@@ -207,19 +254,39 @@ ${bill.discount > 0 ? `*सूट / डिस्काउंट:* -रु. ${(bi
             ) : (
               <ImageIcon className="w-4 h-4" />
             )}
-            <span>{downloadingPhoto ? 'फोटो तयार होत आहे...' : '📸 Download Photo (फोटो डाऊनलोड करा)'}</span>
+            <span>{downloadingPhoto ? 'फोटो तयार होत आहे...' : '📸 Download Photo (गॅलरीमध्ये सेव्ह करा)'}</span>
           </button>
 
-          {/* OPTION 2: SEND ON WHATSAPP */}
+          {/* OPTION 2: SEND BILL PHOTO ON WHATSAPP (PHOTO ONLY) */}
           <button
-            onClick={handleSendOnWhatsApp}
-            className="w-full sm:flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all"
+            onClick={handleSendPhotoOnWhatsApp}
+            disabled={sendingWhatsAppPhoto || downloadingPhoto}
+            className="w-full sm:flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all disabled:opacity-50"
           >
-            <MessageCircle className="w-4 h-4" />
-            <span>💬 Send on WhatsApp (व्हॉट्सॲपवर पाठवा)</span>
+            {sendingWhatsAppPhoto ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <MessageCircle className="w-4 h-4" />
+            )}
+            <span>{sendingWhatsAppPhoto ? 'फोटो व्हॉट्सॲपवर पाठवत आहे...' : '💬 Send Photo on WhatsApp'}</span>
           </button>
 
         </div>
+
+        {/* Desktop WhatsApp Photo Copy Notice */}
+        {clipboardNotice && (
+          <div className="mx-4 mt-3 p-3 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between animate-in fade-in">
+            <div className="flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-emerald-700 flex-shrink-0" />
+              <div>
+                <span>📸 बिलाचा फोटो कॉपी झाला आहे!</span>
+                <span className="block text-[11px] font-normal text-emerald-900 mt-0.5">
+                  व्हॉट्सॲप चॅट उघडले आहे, तिथे फक्त <strong>Ctrl+V (किंवा Paste)</strong> करा आणि फोटो सेंड करा.
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Photo Downloaded Success Toast */}
         {photoSavedToast && (
@@ -243,10 +310,10 @@ ${bill.discount > 0 ? `*सूट / डिस्काउंट:* -रु. ${(bi
               className="px-2.5 py-1.5 rounded-xl border border-amber-300 font-bold text-slate-900 text-xs w-36 bg-white"
             />
             <button
-              onClick={handleSendOnWhatsApp}
+              onClick={handleSendPhotoOnWhatsApp}
               className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700"
             >
-              पाठवा
+              फोटो पाठवा
             </button>
           </div>
         )}
@@ -671,7 +738,7 @@ ${bill.discount > 0 ? `*सूट / डिस्काउंट:* -रु. ${(bi
         {/* Modal Bottom Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <span className="text-xs text-slate-500 font-medium">
-            📸 वरील थीम निवडून फोटो डाऊनलोड करा
+            📸 बिलाचा फोटो थेट व्हॉट्सॲपवर पाठवला जाईल
           </span>
           <button
             onClick={onClose}
