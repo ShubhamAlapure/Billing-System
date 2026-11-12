@@ -3,17 +3,36 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Automatically load .env if present
+const ENV_PATH = path.join(__dirname, '..', '.env');
+if (fs.existsSync(ENV_PATH)) {
+  const envContent = fs.readFileSync(ENV_PATH, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const trimmed = line.trim();
+    if (trimmed && !trimmed.startsWith('#')) {
+      const [k, ...v] = trimmed.split('=');
+      if (k && v.length && !process.env[k.trim()]) {
+        process.env[k.trim()] = v.join('=').trim();
+      }
+    }
+  });
+}
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const DATA_FILE = path.join(DATA_DIR, 'store_db.json');
 
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'https://svxfcwfxsbggjwtltwlj.supabase.co';
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 
 // Ensure data directory exists
 if (!fs.existsSync(DATA_DIR)) {
@@ -303,6 +322,55 @@ app.get('/api/analytics', (req, res) => {
     },
     totalProductsCount: db.products.length
   });
+});
+
+// UPLOAD BILL PHOTO TO PUBLIC STORAGE
+app.post('/api/upload-bill', async (req, res) => {
+  try {
+    const { imageBase64, fileName } = req.body || {};
+    if (!imageBase64) {
+      return res.status(400).json({ error: 'imageBase64 is required' });
+    }
+
+    if (!SUPABASE_SERVICE_KEY) {
+      return res.status(500).json({ error: 'SUPABASE_SERVICE_KEY is not configured on server' });
+    }
+
+    const adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false },
+    });
+
+    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const cleanBase = (fileName || 'bill').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.jpe?g$/i, '');
+    const uploadName = `${cleanBase}_${Date.now()}.jpg`;
+
+    const { data, error } = await adminClient.storage
+      .from('bills')
+      .upload(uploadName, buffer, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
+
+    if (error) {
+      console.error('Storage upload error:', error);
+      return res.status(500).json({ error: error.message });
+    }
+
+    const { data: pubData } = adminClient.storage
+      .from('bills')
+      .getPublicUrl(uploadName);
+
+    return res.json({
+      success: true,
+      publicUrl: pubData?.publicUrl,
+      fileName: uploadName,
+    });
+  } catch (err) {
+    console.error('Error in /api/upload-bill:', err);
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
 });
 
 // EXPORT / BACKUP

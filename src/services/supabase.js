@@ -24,7 +24,6 @@ export const getSupabaseConfig = () => {
     return { url: localUrl, key: localKey, source: 'local' };
   }
 
-  // Pre-configured default project credentials
   return {
     url: DEFAULT_SUPABASE_URL,
     key: DEFAULT_SUPABASE_KEY,
@@ -58,6 +57,66 @@ export const getSupabaseClient = () => {
     });
   } catch (err) {
     console.warn('Failed to initialize Supabase client:', err);
+    return null;
+  }
+};
+
+// Upload bill photo directly to Supabase Storage and return public image URL
+export const uploadBillPhoto = async (canvas, fileName) => {
+  try {
+    const imageBase64 = canvas.toDataURL('image/jpeg', 0.95);
+    const cleanBase = (fileName || 'bill').replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.jpe?g$/i, '');
+
+    // 1. Try server endpoint /api/upload-bill (works on Vercel and local Express)
+    try {
+      const response = await fetch('/api/upload-bill', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64,
+          fileName: cleanBase,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.publicUrl) {
+          return result.publicUrl;
+        }
+      }
+    } catch (apiErr) {
+      console.warn('Backend upload api failed, trying direct storage fallback:', apiErr);
+    }
+
+    // 2. Direct client fallback if environment service key exists
+    const serviceKey = import.meta.env.VITE_SUPABASE_SERVICE_KEY;
+    if (serviceKey) {
+      const adminClient = createClient(DEFAULT_SUPABASE_URL, serviceKey, {
+        auth: { persistSession: false },
+      });
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+      if (!blob) return null;
+
+      const uploadName = `${cleanBase}_${Date.now()}.jpg`;
+      const { error } = await adminClient.storage
+        .from('bills')
+        .upload(uploadName, blob, {
+          contentType: 'image/jpeg',
+          upsert: true,
+        });
+
+      if (!error) {
+        const { data: pubData } = adminClient.storage
+          .from('bills')
+          .getPublicUrl(uploadName);
+        return pubData?.publicUrl || null;
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Failed to upload bill photo:', err);
     return null;
   }
 };

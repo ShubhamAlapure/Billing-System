@@ -1,9 +1,10 @@
 import React, { useState, useRef } from 'react';
 import { 
   X, Image as ImageIcon, MessageCircle, 
-  CheckCircle2, Sparkles, Palette, Share2, ClipboardCheck
+  CheckCircle2, Sparkles, Palette, Phone, Send
 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { uploadBillPhoto } from '../services/supabase';
 
 export default function BillReceiptModal({ bill, onClose }) {
   // Theme state: 'classic' | 'royal' | 'modern'
@@ -14,7 +15,6 @@ export default function BillReceiptModal({ bill, onClose }) {
   const [downloadingPhoto, setDownloadingPhoto] = useState(false);
   const [photoSavedToast, setPhotoSavedToast] = useState(false);
   const [sendingWhatsAppPhoto, setSendingWhatsAppPhoto] = useState(false);
-  const [clipboardNotice, setClipboardNotice] = useState(false);
   const [phoneNumberInput, setPhoneNumberInput] = useState(bill?.customerPhone || '');
   const [showPhonePrompt, setShowPhonePrompt] = useState(false);
 
@@ -47,13 +47,12 @@ export default function BillReceiptModal({ bill, onClose }) {
     }
   };
 
-  // 1. DOWNLOAD PHOTO (ULTRA HIGH-DEFINITION JPG CAPTURE)
+  // 1. DOWNLOAD PHOTO (SAVE TO GALLERY / DEVICE)
   const handleDownloadPhoto = async () => {
     if (!receiptRef.current) return;
     setDownloadingPhoto(true);
 
     try {
-      // 3x Scale for crystal-clear retina photo quality
       const canvas = await html2canvas(receiptRef.current, {
         scale: 3,
         useCORS: true,
@@ -81,7 +80,7 @@ export default function BillReceiptModal({ bill, onClose }) {
     }
   };
 
-  // 2. SEND PHOTO DIRECTLY ON WHATSAPP (NO TEXT - PHOTO ONLY)
+  // 2. DIRECTLY OPEN THE CHAT OF THAT SPECIFIC NUMBER WITH THE BILL PHOTO (NO SEARCHING / NO CONTACT SELECTION!)
   const handleSendPhotoOnWhatsApp = async () => {
     if (!receiptRef.current) return;
 
@@ -100,7 +99,7 @@ export default function BillReceiptModal({ bill, onClose }) {
     setSendingWhatsAppPhoto(true);
 
     try {
-      // Render bill DOM to Canvas at 3x resolution
+      // 1. Render bill DOM to Canvas at 3x resolution
       const canvas = await html2canvas(receiptRef.current, {
         scale: 3,
         useCORS: true,
@@ -110,64 +109,54 @@ export default function BillReceiptModal({ bill, onClose }) {
       });
 
       const cleanBillNo = (bill.billNumber || 'Bill').replace(/[^a-zA-Z0-9_-]/g, '_');
-      const fileName = `Parvati_Bhandi_Stores_Bill_${cleanBillNo}.png`;
+      const fileName = `Parvati_Bhandi_Stores_${cleanBillNo}.jpg`;
 
-      // Convert Canvas to Blob
-      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.98));
-      if (!blob) throw new Error('Could not create bill image blob');
+      // 2. Upload photo directly to Supabase Public Storage
+      const photoUrl = await uploadBillPhoto(canvas, fileName);
 
-      const imageFile = new File([blob], fileName, { type: 'image/png' });
-
-      // METHOD 1: Mobile & Supported Browser Native Share
-      // This directly opens WhatsApp with the ACTUAL BILL PHOTO attached!
-      if (navigator.canShare && navigator.canShare({ files: [imageFile] })) {
-        try {
-          await navigator.share({
-            files: [imageFile],
-            title: `पार्वती भांडी स्टोअर्स बिल ${bill.billNumber}`,
-          });
-          setSendingWhatsAppPhoto(false);
-          return;
-        } catch (shareErr) {
-          if (shareErr.name === 'AbortError') {
-            setSendingWhatsAppPhoto(false);
-            return;
-          }
-          console.warn('Native file share cancelled or failed, falling back to clipboard/download:', shareErr);
-        }
-      }
-
-      // METHOD 2: Desktop / Web WhatsApp Mode
-      // 1. Copy image to clipboard so the user can simply press Ctrl+V / Cmd+V in WhatsApp Web
-      let copiedToClipboard = false;
+      // 3. Copy image to clipboard (so pressing Ctrl+V or Paste in chat attaches full photo)
       try {
-        if (navigator.clipboard && window.ClipboardItem) {
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png', 0.98));
+        if (blob && navigator.clipboard && window.ClipboardItem) {
           await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
           ]);
-          copiedToClipboard = true;
-          setClipboardNotice(true);
-          setTimeout(() => setClipboardNotice(false), 7000);
         }
       } catch (clipErr) {
-        console.warn('Clipboard write not allowed:', clipErr);
+        console.warn('Clipboard copy warning:', clipErr);
       }
 
-      // 2. Also download the photo so it is saved in downloads/gallery
+      // 4. Also download photo to local gallery/device
+      const imageJpg = canvas.toDataURL('image/jpeg', 0.95);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
+      link.href = imageJpg;
       link.download = fileName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
 
-      // 3. Open WhatsApp Web to the customer's chat
-      const whatsappUrl = `https://wa.me/${cleanPhone}`;
-      window.open(whatsappUrl, '_blank');
+      // 5. DIRECTLY OPEN WHATSAPP CHAT OF THAT NUMBER WITH THE PHOTO
+      // If photoUrl is available, pass the direct image URL which WhatsApp loads as a rich photo preview
+      const messageText = photoUrl || `पार्वती भांडी स्टोअर्स बिल ${bill.billNumber || ''}`;
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(messageText)}`;
+
+      // Open chat directly (handling mobile and desktop smoothly without popup blocking)
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.location.href = whatsappUrl;
+      } else {
+        const win = window.open(whatsappUrl, '_blank');
+        if (!win || win.closed || typeof win.closed === 'undefined') {
+          window.location.href = whatsappUrl;
+        }
+      }
+
+      setPhotoSavedToast(true);
+      setTimeout(() => setPhotoSavedToast(false), 4000);
 
     } catch (err) {
       console.error('Error generating photo for WhatsApp:', err);
-      alert('बिलाचा फोटो तयार करताना अडचण आली. कृपया "Download Photo" बटण वापरून फोटो डाऊनलोड करा.');
+      alert('बिलाचा फोटो तयार करताना अडचण आली. कृपया "Download Photo" बटण वापरा.');
     } finally {
       setSendingWhatsAppPhoto(false);
     }
@@ -194,11 +183,31 @@ export default function BillReceiptModal({ bill, onClose }) {
           </button>
         </div>
 
+        {/* Customer WhatsApp Phone Bar (Verify / Quick Edit Number) */}
+        <div className="px-4 py-2 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
+            <Phone className="w-3.5 h-3.5 text-emerald-600" />
+            <span>व्हॉट्सॲप नंबर:</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-400">+91</span>
+            <input
+              type="tel"
+              maxLength={10}
+              placeholder="10 अंकी नंबर टाका"
+              value={phoneNumberInput}
+              onChange={(e) => setPhoneNumberInput(e.target.value.replace(/\D/g, ''))}
+              className="px-2.5 py-1 rounded-xl border border-emerald-300 font-extrabold text-slate-900 text-xs w-36 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+
         {/* 2-3 BACKGROUND / THEME SELECTION TABS */}
         <div className="px-4 py-2.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 flex-shrink-0">
             <Palette className="w-3.5 h-3.5 text-emerald-600" />
-            <span>बिलाची थीम निवडा:</span>
+            <span>थीम:</span>
           </div>
 
           <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -240,24 +249,24 @@ export default function BillReceiptModal({ bill, onClose }) {
           </div>
         </div>
 
-        {/* Primary Action Buttons: DOWNLOAD PHOTO & SEND PHOTO ON WHATSAPP */}
+        {/* Primary Action Buttons: DOWNLOAD PHOTO & SEND DIRECTLY TO THAT NUMBER */}
         <div className="p-4 bg-amber-50/80 border-b border-amber-200/80 flex flex-col sm:flex-row items-center gap-3">
           
           {/* OPTION 1: DOWNLOAD PHOTO */}
           <button
             onClick={handleDownloadPhoto}
             disabled={downloadingPhoto || sendingWhatsAppPhoto}
-            className="w-full sm:flex-1 py-3 px-4 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 active:scale-95 text-white font-extrabold rounded-2xl shadow-md shadow-red-600/25 flex items-center justify-center gap-2 text-xs sm:text-sm transition-all disabled:opacity-50"
+            className="w-full sm:flex-1 py-3 px-4 bg-slate-800 hover:bg-slate-900 active:scale-95 text-white font-extrabold rounded-2xl shadow-md flex items-center justify-center gap-2 text-xs sm:text-sm transition-all disabled:opacity-50"
           >
             {downloadingPhoto ? (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             ) : (
-              <ImageIcon className="w-4 h-4" />
+              <ImageIcon className="w-4 h-4 text-emerald-400" />
             )}
-            <span>{downloadingPhoto ? 'फोटो तयार होत आहे...' : '📸 Download Photo (गॅलरीमध्ये सेव्ह करा)'}</span>
+            <span>{downloadingPhoto ? 'फोटो सेव्ह होत आहे...' : '📸 Download Photo (गॅलरीमध्ये सेव्ह करा)'}</span>
           </button>
 
-          {/* OPTION 2: SEND BILL PHOTO ON WHATSAPP (PHOTO ONLY) */}
+          {/* OPTION 2: DIRECTLY OPEN CHAT OF THAT NUMBER WITH THE PHOTO */}
           <button
             onClick={handleSendPhotoOnWhatsApp}
             disabled={sendingWhatsAppPhoto || downloadingPhoto}
@@ -268,32 +277,17 @@ export default function BillReceiptModal({ bill, onClose }) {
             ) : (
               <MessageCircle className="w-4 h-4" />
             )}
-            <span>{sendingWhatsAppPhoto ? 'फोटो व्हॉट्सॲपवर पाठवत आहे...' : '💬 Send Photo on WhatsApp'}</span>
+            <span>{sendingWhatsAppPhoto ? 'थेट चॅटमध्ये फोटो उघडत आहे...' : '💬 Send Photo on WhatsApp'}</span>
           </button>
 
         </div>
 
-        {/* Desktop WhatsApp Photo Copy Notice */}
-        {clipboardNotice && (
-          <div className="mx-4 mt-3 p-3 rounded-2xl bg-emerald-100 border border-emerald-300 text-emerald-950 text-xs font-bold flex items-center justify-between animate-in fade-in">
-            <div className="flex items-center gap-2">
-              <ClipboardCheck className="w-5 h-5 text-emerald-700 flex-shrink-0" />
-              <div>
-                <span>📸 बिलाचा फोटो कॉपी झाला आहे!</span>
-                <span className="block text-[11px] font-normal text-emerald-900 mt-0.5">
-                  व्हॉट्सॲप चॅट उघडले आहे, तिथे फक्त <strong>Ctrl+V (किंवा Paste)</strong> करा आणि फोटो सेंड करा.
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Photo Downloaded Success Toast */}
+        {/* Success Toast */}
         {photoSavedToast && (
           <div className="mx-4 mt-3 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center justify-between animate-in fade-in">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>✓ बिलाचा फोटो यशस्वीरित्या डाऊनलोड झाला! (Photo Saved to Gallery)</span>
+              <span>✓ बिलाचा फोटो थेट त्या नंबरच्या चॅटमध्ये उघडला आहे! (Photo Opened in WhatsApp)</span>
             </div>
           </div>
         )}
@@ -301,7 +295,7 @@ export default function BillReceiptModal({ bill, onClose }) {
         {/* Customer Phone Prompt if not provided */}
         {showPhonePrompt && (
           <div className="mx-4 mt-3 p-3 bg-amber-50 border border-amber-200 rounded-2xl text-xs flex items-center gap-2">
-            <span className="font-bold text-amber-900">व्हॉट्सॲप नंबर:</span>
+            <span className="font-bold text-amber-900">कृपया १० अंकी व्हॉट्सॲप नंबर टाका:</span>
             <input
               type="tel"
               placeholder="10 digit mobile no"
@@ -313,7 +307,7 @@ export default function BillReceiptModal({ bill, onClose }) {
               onClick={handleSendPhotoOnWhatsApp}
               className="px-3 py-1.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700"
             >
-              फोटो पाठवा
+              ओपन करा
             </button>
           </div>
         )}
@@ -738,7 +732,7 @@ export default function BillReceiptModal({ bill, onClose }) {
         {/* Modal Bottom Footer */}
         <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
           <span className="text-xs text-slate-500 font-medium">
-            📸 बिलाचा फोटो थेट व्हॉट्सॲपवर पाठवला जाईल
+            📸 थेट त्या व्हॉट्सॲप नंबरच्या चॅटमध्ये फोटो उघडेल
           </span>
           <button
             onClick={onClose}
