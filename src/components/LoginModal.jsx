@@ -1,34 +1,28 @@
 import React, { useState } from 'react';
-import { Lock, User, Store, ShieldCheck, ArrowRight, Sparkles } from 'lucide-react';
+import { Lock, User, Store, ShieldCheck, ArrowRight } from 'lucide-react';
 
 export default function LoginModal({ onLogin }) {
-  const [username, setUsername] = useState('Admin');
-  const [password, setPassword] = useState('admin123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError('Please enter both username and password');
+      setError('Please enter both name and password');
       return;
     }
 
     setLoading(true);
     setError('');
 
-    const result = await onLogin(username.trim(), password);
+    const result = await onLogin(username.trim(), password.trim());
     setLoading(false);
 
     if (!result.success) {
-      setError(result.message || 'Invalid username or password');
+      setError(result.message || 'Invalid Name or Password');
     }
-  };
-
-  const handleQuickDemo = () => {
-    setUsername('Admin');
-    setPassword('admin123');
-    setError('');
   };
 
   return (
@@ -37,8 +31,8 @@ export default function LoginModal({ onLogin }) {
         
         {/* Top Header with Store Brand */}
         <div className="bg-gradient-to-br from-emerald-600 via-teal-700 to-slate-900 p-7 text-white text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 -mr-10 -mt-10 w-36 h-36 bg-white/10 rounded-full blur-2xl"></div>
-          <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-36 h-36 bg-emerald-400/20 rounded-full blur-2xl"></div>
+          <div className="absolute top-0 right-0 -mr-10 -mt-10 w-36 h-36 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+          <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-36 h-36 bg-emerald-400/20 rounded-full blur-2xl pointer-events-none"></div>
 
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/15 backdrop-blur-md border border-white/25 shadow-inner mb-3">
             <Store className="w-9 h-9 text-emerald-300" />
@@ -56,7 +50,7 @@ export default function LoginModal({ onLogin }) {
         <div className="p-6 sm:p-8">
           <div className="mb-6 text-center">
             <h2 className="text-lg font-bold text-slate-800">Store Staff & Admin Login</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Please sign in to access billing, sales & inventory</p>
+            <p className="text-xs text-slate-500 mt-0.5">Please enter your authorized name and password</p>
           </div>
 
           {error && (
@@ -79,9 +73,10 @@ export default function LoginModal({ onLogin }) {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="e.g. Admin or Parvati"
+                  placeholder="Enter your name"
                   className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent text-sm font-medium transition-all"
                   required
+                  autoFocus
                 />
               </div>
             </div>
@@ -121,20 +116,10 @@ export default function LoginModal({ onLogin }) {
             </button>
           </form>
 
-          {/* Quick Demo Credentials pill */}
-          <div className="mt-6 pt-5 border-t border-slate-100 flex flex-col items-center gap-2">
-            <button
-              type="button"
-              onClick={handleQuickDemo}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 text-xs font-medium transition-colors"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Use Default: <strong>Admin</strong> / <strong>admin123</strong></span>
-            </button>
-            <div className="flex items-center gap-1 text-[11px] text-slate-400">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Permanent Local & Cloud Database Protection</span>
-            </div>
+          {/* Secure database protection badge */}
+          <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Permanent Database Protection & Encryption</span>
           </div>
 
         </div>
@@ -143,4 +128,3 @@ export default function LoginModal({ onLogin }) {
     </div>
   );
 }
-

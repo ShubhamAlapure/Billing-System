@@ -14,11 +14,14 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('landing'); // 'landing', 'addProduct', 'billing', 'history'
   const [activeBillReceipt, setActiveBillReceipt] = useState(null);
 
-  // Check existing session
+  // Check existing session (Strictly valid for Rahul)
   useEffect(() => {
     const existingUser = api.getCurrentUser();
-    if (existingUser) {
+    if (existingUser && existingUser.username && existingUser.username.toLowerCase() === 'rahul') {
       setUser(existingUser);
+    } else {
+      api.logout();
+      setUser(null);
     }
     setAuthChecked(true);
   }, []);
@@ -49,7 +52,7 @@ export default function App() {
     );
   }
 
-  // If not logged in, enforce login screen at beginning as requested
+  // If not logged in as Rahul, enforce login screen
   if (!user) {
     return <LoginModal onLogin={handleLogin} />;
   }
@@ -107,4 +110,3 @@ export default function App() {
     </div>
   );
 }
-

@@ -28,8 +28,8 @@ const defaultData = {
     address: "Main Market, Station Road, Opp. SBI",
     phone: "9876543210",
     gstin: "27AAAAA0000A1Z5",
-    adminUser: "Admin",
-    adminPass: "admin123"
+    adminUser: "Rahul",
+    adminPass: "787573"
   },
   products: [],
   bills: []
@@ -74,13 +74,13 @@ function writeDB(data) {
 app.post('/api/auth/login', (req, res) => {
   const { username, password } = req.body;
   const db = readDB();
-  const validUser = db.settings.adminUser || "Admin";
-  const validPass = db.settings.adminPass || "admin123";
+  const validUser = db.settings.adminUser || "Rahul";
+  const validPass = db.settings.adminPass || "787573";
 
-  if (
-    (username && username.trim().toLowerCase() === validUser.toLowerCase() || username.toLowerCase() === 'admin' || username.toLowerCase() === 'parvati') &&
-    (password === validPass || password === '123' || password === 'admin123' || password === '123456')
-  ) {
+  const cleanUser = username ? username.trim().toLowerCase() : '';
+  const cleanPass = password ? password.trim() : '';
+
+  if (cleanUser === validUser.toLowerCase() && cleanPass === validPass) {
     return res.json({
       success: true,
       user: { username: validUser, role: 'admin' },
@@ -90,7 +90,7 @@ app.post('/api/auth/login', (req, res) => {
 
   return res.status(401).json({
     success: false,
-    message: 'Invalid Username or Password. (Default: Admin / admin123)'
+    message: 'Invalid Staff Name or Password.'
   });
 });
 

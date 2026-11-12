@@ -1,4 +1,5 @@
-// Persistent API & Data Storage Engine for PARVATI BHANDI STORES
+// Persistent Multi-Layer Data Engine for PARVATI BHANDI STORES
+// Dual Persistence: IndexedDB + LocalStorage + Backend API (when online)
 
 const BACKEND_BASE = '/api';
 
@@ -11,47 +12,149 @@ const STORAGE_KEYS = {
 
 const formatDate = (d) => d.toISOString().split('T')[0];
 
+// --- IndexedDB Permanent Storage Layer ---
+const DB_NAME = 'ParvatiBhandiStores_DB';
+const DB_VERSION = 1;
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = (event) => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains('products')) {
+        db.createObjectStore('products', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('bills')) {
+        db.createObjectStore('bills', { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains('meta')) {
+        db.createObjectStore('meta', { keyPath: 'key' });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => {
+      console.warn('IndexedDB open error, falling back to LocalStorage', request.error);
+      resolve(null);
+    };
+  });
+}
+
+async function idbGetAll(storeName) {
+  const db = await openIDB();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve(null);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+async function idbPut(storeName, item) {
+  const db = await openIDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.put(item);
+  } catch (err) {
+    console.warn('IDB put error', err);
+  }
+}
+
+async function idbDelete(storeName, id) {
+  const db = await openIDB();
+  if (!db) return;
+  try {
+    const tx = db.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    store.delete(id);
+  } catch (err) {
+    console.warn('IDB delete error', err);
+  }
+}
+
+// Reconcile and synchronize LocalStorage with IndexedDB
+async function syncLocalWithIDB(storeName, storageKey) {
+  try {
+    const idbItems = await idbGetAll(storeName);
+    const localRaw = localStorage.getItem(storageKey);
+    const localItems = localRaw ? JSON.parse(localRaw) : [];
+
+    // Map by id to merge
+    const mergedMap = new Map();
+    (idbItems || []).forEach(item => { if (item && item.id) mergedMap.set(item.id, item); });
+    (localItems || []).forEach(item => { if (item && item.id) mergedMap.set(item.id, item); });
+
+    const merged = Array.from(mergedMap.values());
+    localStorage.setItem(storageKey, JSON.stringify(merged));
+
+    // Ensure IndexedDB has all merged items
+    merged.forEach(item => idbPut(storeName, item));
+    return merged;
+  } catch (err) {
+    console.warn('Sync error:', err);
+    const localRaw = localStorage.getItem(storageKey);
+    return localRaw ? JSON.parse(localRaw) : [];
+  }
+}
+
 export const api = {
-  // Authentication
+  // Authentication (Strictly Rahul / 787573)
   login: async (username, password) => {
+    const cleanUser = username ? username.trim() : '';
+    const cleanPass = password ? password.trim() : '';
+
     try {
       const res = await fetch(`${BACKEND_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ username: cleanUser, password: cleanPass })
       });
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const data = await res.json();
-          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
-          return { success: true, user: data.user };
+          if (data.success && data.user) {
+            localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(data.user));
+            return { success: true, user: data.user };
+          }
         }
       }
     } catch {
-      // offline / standalone Vercel fallback
+      // Backend unavailable / Vercel static fallback
     }
 
-    // Client-side authentication fallback (works seamlessly on Vercel deployment)
-    const validUser = 'Admin';
-    const validPass = 'admin123';
-
-    if (
-      (username && (username.trim().toLowerCase() === validUser.toLowerCase() || username.toLowerCase() === 'admin' || username.toLowerCase() === 'parvati')) &&
-      (password === validPass || password === '123' || password === 'admin123' || password === '123456')
-    ) {
-      const user = { username: 'Admin', role: 'admin' };
+    // Direct Credentials Validation: Name Rahul & Password 787573
+    if (cleanUser.toLowerCase() === 'rahul' && cleanPass === '787573') {
+      const user = { username: 'Rahul', role: 'admin' };
       localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       return { success: true, user };
     }
 
-    return { success: false, message: 'Invalid Username or Password. Try Admin / admin123' };
+    return { success: false, message: 'Invalid Staff Name or Password. Please try again.' };
   },
 
   getCurrentUser: () => {
     try {
       const user = localStorage.getItem(STORAGE_KEYS.USER);
-      return user ? JSON.parse(user) : null;
+      if (!user) return null;
+      const parsed = JSON.parse(user);
+      // Ensure only authorized user 'Rahul' stays logged in
+      if (parsed && parsed.username && parsed.username.toLowerCase() === 'rahul') {
+        return parsed;
+      }
+      localStorage.removeItem(STORAGE_KEYS.USER);
+      return null;
     } catch {
       return null;
     }
@@ -61,33 +164,28 @@ export const api = {
     localStorage.removeItem(STORAGE_KEYS.USER);
   },
 
-  // Products
+  // Products (100% Permanent Persistence)
   getProducts: async () => {
+    // 1. Try Backend API
     try {
       const res = await fetch(`${BACKEND_BASE}/products`);
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const products = await res.json();
-          if (Array.isArray(products)) {
+          if (Array.isArray(products) && products.length > 0) {
             localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(products));
+            products.forEach(p => idbPut('products', p));
             return products;
           }
         }
       }
     } catch {
-      // fallback to local storage
+      // Offline / Vercel fallback
     }
 
-    const local = localStorage.getItem(STORAGE_KEYS.PRODUCTS);
-    if (local) {
-      try {
-        return JSON.parse(local);
-      } catch {
-        return [];
-      }
-    }
-    return [];
+    // 2. Read and merge from IndexedDB & LocalStorage
+    return await syncLocalWithIDB('products', STORAGE_KEYS.PRODUCTS);
   },
 
   addProduct: async (productData) => {
@@ -106,7 +204,7 @@ export const api = {
         }
       }
     } catch {
-      // offline / Vercel fallback
+      // Offline / Vercel
     }
 
     if (!savedProduct) {
@@ -121,7 +219,9 @@ export const api = {
       };
     }
 
-    // Save permanently to browser localStorage
+    // Save permanently to both IndexedDB and LocalStorage
+    await idbPut('products', savedProduct);
+
     const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
     const updated = [savedProduct, ...current.filter(p => p.id !== savedProduct.id)];
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updated));
@@ -137,21 +237,28 @@ export const api = {
         body: JSON.stringify(productData)
       });
     } catch {
-      // offline fallback
+      // Offline
     }
 
     const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
     const updated = current.map(p => p.id === id ? { ...p, ...productData, updatedAt: new Date().toISOString() } : p);
     localStorage.setItem(STORAGE_KEYS.PRODUCTS, JSON.stringify(updated));
-    return updated.find(p => p.id === id);
+
+    const updatedItem = updated.find(p => p.id === id);
+    if (updatedItem) {
+      await idbPut('products', updatedItem);
+    }
+    return updatedItem;
   },
 
   deleteProduct: async (id) => {
     try {
       await fetch(`${BACKEND_BASE}/products/${id}`, { method: 'DELETE' });
     } catch {
-      // offline fallback
+      // Offline
     }
+
+    await idbDelete('products', id);
 
     const current = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
     const updated = current.filter(p => p.id !== id);
@@ -159,7 +266,7 @@ export const api = {
     return true;
   },
 
-  // Bills
+  // Bills & Sales (100% Permanent Persistence)
   getBills: async (filters = {}) => {
     try {
       const query = new URLSearchParams(filters).toString();
@@ -168,22 +275,25 @@ export const api = {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const bills = await res.json();
-          if (Array.isArray(bills)) {
+          if (Array.isArray(bills) && bills.length > 0) {
             localStorage.setItem(STORAGE_KEYS.BILLS, JSON.stringify(bills));
+            bills.forEach(b => idbPut('bills', b));
             return bills;
           }
         }
       }
     } catch {
-      // fallback
+      // Fallback
     }
 
-    let bills = JSON.parse(localStorage.getItem(STORAGE_KEYS.BILLS) || '[]');
+    let bills = await syncLocalWithIDB('bills', STORAGE_KEYS.BILLS);
     if (filters.date) {
       bills = bills.filter(b => b.date === filters.date);
     } else if (filters.month) {
       bills = bills.filter(b => b.date && b.date.startsWith(filters.month));
     }
+    // Sort newest first
+    bills.sort((a, b) => new Date(b.date + ' ' + (b.time || '00:00')) - new Date(a.date + ' ' + (a.time || '00:00')));
     return bills;
   },
 
@@ -203,7 +313,7 @@ export const api = {
         }
       }
     } catch {
-      // fallback
+      // Offline / Vercel
     }
 
     if (!savedBill) {
@@ -237,14 +347,17 @@ export const api = {
       };
     }
 
+    // Save permanently to IndexedDB and LocalStorage
+    await idbPut('bills', savedBill);
+
     const currentBills = JSON.parse(localStorage.getItem(STORAGE_KEYS.BILLS) || '[]');
-    const updatedBills = [savedBill, ...currentBills];
+    const updatedBills = [savedBill, ...currentBills.filter(b => b.id !== savedBill.id)];
     localStorage.setItem(STORAGE_KEYS.BILLS, JSON.stringify(updatedBills));
 
     return savedBill;
   },
 
-  // Analytics
+  // Sales Analytics (Daily & Monthly computed from permanent bills)
   getAnalytics: async (date, month) => {
     try {
       const params = new URLSearchParams();
@@ -255,17 +368,18 @@ export const api = {
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
-          return await res.json();
+          const data = await res.json();
+          if (data && data.daily) return data;
         }
       }
     } catch {
-      // fallback
+      // Offline fallback
     }
 
-    // Local calculation fallback
+    // Local permanent calculation
     const targetDate = date || formatDate(new Date());
     const targetMonth = month || targetDate.slice(0, 7);
-    const bills = JSON.parse(localStorage.getItem(STORAGE_KEYS.BILLS) || '[]');
+    const bills = await syncLocalWithIDB('bills', STORAGE_KEYS.BILLS);
 
     const dailyBills = bills.filter(b => b.date === targetDate);
     const dailyRevenue = dailyBills.reduce((acc, b) => acc + (b.total || 0), 0);
@@ -282,7 +396,7 @@ export const api = {
       daysInMonthMap[b.date].billsCount += 1;
     });
 
-    const products = JSON.parse(localStorage.getItem(STORAGE_KEYS.PRODUCTS) || '[]');
+    const products = await syncLocalWithIDB('products', STORAGE_KEYS.PRODUCTS);
 
     return {
       targetDate,

@@ -89,7 +89,7 @@ export default function Navbar({ activeTab, setActiveTab, user, onLogout }) {
                 <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">
                   <User className="w-3.5 h-3.5" />
                 </div>
-                <span className="hidden sm:inline">{user?.username || 'Admin'}</span>
+                <span className="hidden sm:inline">{user?.username || 'Rahul'}</span>
               </div>
 
               <button
