@@ -1,11 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 
+// Default Supabase Project for PARVATI BHANDI STORES
+const DEFAULT_SUPABASE_URL = 'https://svxfcwfxsbggjwtltwlj.supabase.co';
+const DEFAULT_SUPABASE_KEY = 'sb_publishable_0az_8wnVdUGQyfMf_FHTyw_PG_2j8Yd';
+
 const STORAGE_KEYS = {
   SUPABASE_URL: 'pbs_supabase_url',
   SUPABASE_KEY: 'pbs_supabase_key',
 };
 
-// Check environment variables first, then localStorage
 export const getSupabaseConfig = () => {
   const envUrl = import.meta.env.VITE_SUPABASE_URL;
   const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -21,7 +24,12 @@ export const getSupabaseConfig = () => {
     return { url: localUrl, key: localKey, source: 'local' };
   }
 
-  return null;
+  // Pre-configured default project credentials
+  return {
+    url: DEFAULT_SUPABASE_URL,
+    key: DEFAULT_SUPABASE_KEY,
+    source: 'default'
+  };
 };
 
 export const saveSupabaseConfig = (url, key) => {

@@ -339,3 +339,4 @@ create policy "Allow all on bills" on bills for all using (true) with check (tru
     </div>
   );
 }
+
