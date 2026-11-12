@@ -11,6 +11,7 @@
     "start": "concurrently \"npm run server\" \"npm run dev\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.0",
     "canvas-confetti": "^1.9.4",
     "html2canvas": "^1.4.1",
     "lucide-react": "^0.475.0",

@@ -6,6 +6,7 @@ import BillingTab from './components/BillingTab';
 import BillHistory from './components/BillHistory';
 import BillReceiptModal from './components/BillReceiptModal';
 import LoginModal from './components/LoginModal';
+import CloudSyncModal from './components/CloudSyncModal';
 import { api } from './services/api';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
   const [authChecked, setAuthChecked] = useState(false);
   const [activeTab, setActiveTab] = useState('landing'); // 'landing', 'addProduct', 'billing', 'history'
   const [activeBillReceipt, setActiveBillReceipt] = useState(null);
+  const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
 
   // Check existing session (Strictly valid for Rahul)
   useEffect(() => {
@@ -66,6 +68,7 @@ export default function App() {
         setActiveTab={setActiveTab}
         user={user}
         onLogout={handleLogout}
+        onOpenCloudSync={() => setIsCloudSyncOpen(true)}
       />
 
       {/* Main Container */}
@@ -106,6 +109,13 @@ export default function App() {
           onClose={() => setActiveBillReceipt(null)}
         />
       )}
+
+      {/* Multi-Device Cloud Sync Modal */}
+      <CloudSyncModal
+        isOpen={isCloudSyncOpen}
+        onClose={() => setIsCloudSyncOpen(false)}
+        onSyncComplete={() => {}}
+      />
 
     </div>
   );

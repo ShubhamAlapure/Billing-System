@@ -1,7 +1,10 @@
 import React from 'react';
-import { Store, PlusCircle, Receipt, History, LogOut, User, BarChart3 } from 'lucide-react';
+import { Store, PlusCircle, Receipt, History, LogOut, User, BarChart3, Cloud, CloudOff } from 'lucide-react';
+import { api } from '../services/api';
 
-export default function Navbar({ activeTab, setActiveTab, user, onLogout }) {
+export default function Navbar({ activeTab, setActiveTab, user, onLogout, onOpenCloudSync }) {
+  const isCloudActive = api.isCloudSyncActive();
+
   return (
     <>
       {/* Top Header Bar */}
@@ -83,8 +86,32 @@ export default function Navbar({ activeTab, setActiveTab, user, onLogout }) {
               </button>
             </nav>
 
-            {/* User Profile & Logout */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            {/* User Profile, Cloud Sync & Logout */}
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              
+              {/* Cloud Sync Status Pill */}
+              <button
+                onClick={onOpenCloudSync}
+                title={isCloudActive ? "Multi-device Cloud Sync Active" : "Click to connect Cloud Sync for all devices"}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                  isCloudActive
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                    : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100'
+                }`}
+              >
+                {isCloudActive ? (
+                  <>
+                    <Cloud className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />
+                    <span className="hidden sm:inline">Cloud Synced</span>
+                  </>
+                ) : (
+                  <>
+                    <CloudOff className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="hidden sm:inline">Sync Devices</span>
+                  </>
+                )}
+              </button>
+
               <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200/60 text-xs font-semibold text-slate-700">
                 <div className="w-6 h-6 rounded-lg bg-emerald-600 text-white flex items-center justify-center text-xs">
                   <User className="w-3.5 h-3.5" />
