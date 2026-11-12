@@ -227,10 +227,10 @@ export default function BillingTab({ onBillGenerated, setActiveTab }) {
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-black uppercase tracking-tight">
-              PARVATI BHANDI STORES — BILLING COUNTER
+              पार्वती भांडी स्टोअर्स — बिलिंग काउंटर
             </h1>
             <p className="text-[11px] text-emerald-200">
-              Mobile POS • Temporary Price Overrides • Direct WhatsApp Invoicing
+              थोरलीवाडीकर यांचे • मेन रोड, अहमदपूर • मो. 7875739052, 8208945810
             </p>
           </div>
         </div>

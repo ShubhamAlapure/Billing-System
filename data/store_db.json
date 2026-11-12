@@ -1,10 +1,13 @@
 {
   "settings": {
-    "storeName": "PARVATI BHANDI STORES",
-    "tagline": "Quality Kitchenware, Steel, Brass & Home Appliances",
-    "address": "Main Market, Station Road, Opp. SBI",
-    "phone": "9876543210",
-    "gstin": "27AAAAA0000A1Z5",
+    "storeName": "पार्वती भांडी स्टोअर्स",
+    "subTitle": "थोरलीवाडीकर यांचे",
+    "tagline": "आमच्याकडे संसार उपयोगी भांडे व नामांकित कंपनीचे कुकर व मिक्सर योग्य दरात मिळतील.",
+    "address": "मेन रोड, अहमदपूर",
+    "phone": "7875739052, 8208945810",
+    "phone1": "7875739052",
+    "phone2": "8208945810",
+    "note": "एकदा विकलेला माल परत घेतला जाणार नाही.",
     "adminUser": "Rahul",
     "adminPass": "787573"
   },

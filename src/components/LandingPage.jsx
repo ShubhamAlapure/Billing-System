@@ -71,10 +71,10 @@ export default function LandingPage({ setActiveTab, onSelectBill }) {
             <span>Store Dashboard</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-            PARVATI BHANDI STORES
+            पार्वती भांडी स्टोअर्स, अहमदपूर
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
-            Welcome to the main billing & sales hub. Quickly create a new bill, manage store inventory, or inspect daily & monthly sales by day.
+            थोरलीवाडीकर यांचे • मो. 7875739052, 8208945810 • मेन रोड, अहमदपूर
           </p>
         </div>
 

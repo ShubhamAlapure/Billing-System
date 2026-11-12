@@ -26,8 +26,8 @@ export default function Navbar({ activeTab, setActiveTab, user, onLogout }) {
                     POS
                   </span>
                 </div>
-                <p className="text-[11px] font-medium text-slate-500 leading-tight">
-                  पार्वती भांडी स्टोअर्स • Smart Billing
+                <p className="text-[11px] font-semibold text-slate-500 leading-tight">
+                  पार्वती भांडी स्टोअर्स • मेन रोड, अहमदपूर
                 </p>
               </div>
             </div>
